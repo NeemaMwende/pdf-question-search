@@ -24,7 +24,7 @@ export default function SearchBar({ onSearch }: SearchBarProps) {
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search for questions or answers..."
+          placeholder="Search for questions in file..."
           className="flex-1 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         

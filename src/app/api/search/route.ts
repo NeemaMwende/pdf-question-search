@@ -2,6 +2,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+
+interface Document {
+  id: string;
+  filename: string;
+  questions: string[];
+  answers?: Record<string, string>;
+}
+
+interface Database {
+  documents: Document[];
+}
+
+type SearchResultType = 'question' | 'answer' | 'document';
+
+interface BaseSearchResult {
+  type: SearchResultType;
+  content: string;
+  documentId: string;
+  filename: string;
+}
+
+interface QuestionSearchResult extends BaseSearchResult {
+  type: 'question';
+  answer: string;
+}
+
+interface AnswerSearchResult extends BaseSearchResult {
+  type: 'answer';
+  question: string;
+}
+
+interface DocumentSearchResult extends BaseSearchResult {
+  type: 'document';
+}
+
+type SearchResult = QuestionSearchResult | AnswerSearchResult | DocumentSearchResult;
+
 const dbPath = path.join(process.cwd(), 'data', 'documents.json');
 
 // Initialize the DB file if it doesn't exist
@@ -26,7 +63,7 @@ export async function GET() {
   
   try {
     const data = await fs.readFile(dbPath, 'utf8');
-    const db = JSON.parse(data);
+    const db = JSON.parse(data) as Database;
     
     return NextResponse.json({
       documents: db.documents,
@@ -46,7 +83,7 @@ export async function PUT(req: NextRequest) {
   await ensureDbExists();
   
   try {
-    const document = await req.json();
+    const document = await req.json() as Document;
     
     if (!document.id || !document.filename) {
       return NextResponse.json({ 
@@ -56,10 +93,10 @@ export async function PUT(req: NextRequest) {
     }
     
     const data = await fs.readFile(dbPath, 'utf8');
-    const db = JSON.parse(data);
+    const db = JSON.parse(data) as Database;
     
     // Find if document already exists
-    const existingIndex = db.documents.findIndex((doc: any) => doc.id === document.id);
+    const existingIndex = db.documents.findIndex((doc: Document) => doc.id === document.id);
     
     if (existingIndex >= 0) {
       db.documents[existingIndex] = document;
@@ -86,7 +123,10 @@ export async function POST(req: NextRequest) {
   await ensureDbExists();
   
   try {
-    const { searchTerm, searchIn = 'both' } = await req.json();
+    const { searchTerm, searchIn = 'both' } = await req.json() as {
+      searchTerm: string;
+      searchIn?: 'both' | 'questions' | 'answers';
+    };
     
     if (!searchTerm) {
       return NextResponse.json({ 
@@ -96,8 +136,8 @@ export async function POST(req: NextRequest) {
     }
     
     const data = await fs.readFile(dbPath, 'utf8');
-    const db = JSON.parse(data);
-    const results = [];
+    const db = JSON.parse(data) as Database;
+    const results: SearchResult[] = [];
     
     for (const doc of db.documents) {
       // Search in questions
@@ -109,7 +149,7 @@ export async function POST(req: NextRequest) {
               content: question,
               filename: doc.filename,
               documentId: doc.id,
-              answer: doc.answers?.[question]
+              answer: doc.answers?.[question] || ''
             });
           }
         }
@@ -160,7 +200,7 @@ export async function DELETE(req: NextRequest) {
   await ensureDbExists();
   
   try {
-    const { id } = await req.json();
+    const { id } = await req.json() as { id: string };
     
     if (!id) {
       return NextResponse.json({ 
@@ -170,10 +210,10 @@ export async function DELETE(req: NextRequest) {
     }
     
     const data = await fs.readFile(dbPath, 'utf8');
-    const db = JSON.parse(data);
+    const db = JSON.parse(data) as Database;
     
     // Filter out the document to delete
-    db.documents = db.documents.filter((doc: any) => doc.id !== id);
+    db.documents = db.documents.filter((doc: Document) => doc.id !== id);
     
     await fs.writeFile(dbPath, JSON.stringify(db, null, 2));
     

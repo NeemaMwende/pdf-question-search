@@ -1,34 +1,39 @@
-// app/api/extract-text/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import PDFParser from 'pdf-parse';
+import * as PDFParser from 'pdf-parse';
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const file = formData.get('file') as File;
-    
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    const file = formData.get('file');
+
+    if (!(file instanceof Blob)) {
+      return NextResponse.json({ error: 'No valid file provided' }, { status: 400 });
     }
-    
+
     const buffer = Buffer.from(await file.arrayBuffer());
-    const pdfData = await PDFParser(buffer);
-    
+    const pdfData = await PDFParser.default(buffer);
+
     // Extract text from PDF
-    const text = pdfData.text;
-    const pageCount = pdfData.numpages;
-    
+    const text = pdfData.text || '';
+    const pageCount = pdfData.numpages || 0;
+
     return NextResponse.json({
       text,
       pageCount,
       filename: file.name,
       success: true
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('PDF extraction failed:', error);
-    return NextResponse.json({ 
-      error: 'Failed to extract text from PDF',
-      details: error.message 
-    }, { status: 500 });
+
+    let errorMessage = 'An unknown error occurred';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to extract text from PDF', details: errorMessage },
+      { status: 500 }
+    );
   }
 }

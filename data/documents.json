@@ -29,6 +29,15 @@
         "But What Is It?",
         "Why is Machine Learning Possible Now?"
       ],
+      "answers": {
+        "Why is Machine Learning Possible Now?": "Machine learning is possible now because it allows computers to \"learn by example\" through training with large volumes of data, which was not possible with traditional programming on classic computers that operated based on fixed rules. This training process enables computers to make predictions and complex decisions autonomously once the model is trained."
+      }
+    },
+    {
+      "id": "d6109cd0-e1b1-4511-ae76-2f6432556f6c",
+      "filename": "Invoice.pdf",
+      "text": "\n\nInvoice\n7 February 2024\nBILL TO:\nNeema\nMwende Mbiti\n+254792366778\nMONTHPRICE\nTAX (0%)SUBTOTAL\nSUBTOTAL\nTOTALS\nJanuary 2025$250.00\n0.00\n$250.00\n$250.00\n1\nPayment Information\nRuaka  00618, Nairobi \n+254 792 366 778\nneemamwende009@gmail.com\nNeema Mwende Mbiti\nBank: Equity Bank\nAccount No: 0670185946128",
+      "questions": [],
       "answers": {}
     }
   ]

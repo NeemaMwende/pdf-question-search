@@ -1,4 +1,3 @@
-// app/api/answer-question/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
@@ -9,18 +8,17 @@ const openai = new OpenAI({
 export async function POST(req: NextRequest) {
   try {
     const { question, context, filename } = await req.json();
-    
+
     if (!question || !context) {
       return NextResponse.json({ error: 'Missing question or context' }, { status: 400 });
     }
-    
-    // Use OpenAI to generate an answer to the question
+
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant that answers questions based on the provided document context. Use only the information provided to answer the question. If the answer cannot be determined from the context, say so."
+          content: "You are a helpful assistant that extracts all questions from the loaded file and answers questions based on the provided document context. Use only the information provided to answer the question. If the answer cannot be determined from the context, say so."
         },
         {
           role: "user",
@@ -28,18 +26,25 @@ export async function POST(req: NextRequest) {
         }
       ]
     });
-    
+
     const answer = response.choices[0].message.content;
-    
+
     return NextResponse.json({
       answer,
       success: true
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to answer question:', error);
-    return NextResponse.json({ 
-      error: 'Failed to generate answer',
-      details: error.message 
-    }, { status: 500 });
+
+    let errorMessage = 'An unexpected error occurred';
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to generate answer', details: errorMessage },
+      { status: 500 }
+    );
   }
 }

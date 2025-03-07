@@ -1,4 +1,3 @@
-// app/api/extract-questions/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
@@ -9,11 +8,11 @@ const openai = new OpenAI({
 export async function POST(req: NextRequest) {
   try {
     const { text, filename } = await req.json();
-    
+
     if (!text) {
       return NextResponse.json({ error: 'No text provided' }, { status: 400 });
     }
-    
+
     // Use OpenAI to extract questions from the text
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -24,25 +23,48 @@ export async function POST(req: NextRequest) {
         },
         {
           role: "user",
-          content: `Extract all questions from the following text: ${text.substring(0, 10000)}`
+          content: `Extract all questions from the following text:\n\n${text.substring(0, 10000)}`
         }
       ],
-      response_format: { type: "json_object" }
+      max_tokens: 500,
+      temperature: 0.3
     });
-    
-    // Parse the response to get questions
-    const questions = JSON.parse(response.choices[0].message.content).questions;
-    
+
+    // Ensure a valid response exists
+    const content = response.choices[0]?.message?.content ?? null;
+    if (!content) {
+      return NextResponse.json({ error: 'OpenAI returned an empty response' }, { status: 500 });
+    }
+
+    let questions: string[] = [];
+    try {
+      const parsedData = JSON.parse(content);
+      if (Array.isArray(parsedData.questions)) {
+        questions = parsedData.questions;
+      } else {
+        throw new Error('Invalid response format from OpenAI');
+      }
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response:', parseError);
+      return NextResponse.json({ error: 'Failed to process extracted questions' }, { status: 500 });
+    }
+
     return NextResponse.json({
       questions,
       filename,
       success: true
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Question extraction failed:', error);
-    return NextResponse.json({ 
-      error: 'Failed to extract questions',
-      details: error.message 
-    }, { status: 500 });
+
+    let errorMessage = 'An unexpected error occurred';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to extract questions', details: errorMessage },
+      { status: 500 }
+    );
   }
 }
