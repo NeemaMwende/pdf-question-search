@@ -34,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const files = await new Promise<{ file: File }>((resolve, reject) => {
       form.parse(req, (err, _, files) => {
         if (err) reject(err);
-        resolve(files as { file: File });
+        resolve(files as unknown as { file: File });
       });
     });
 
@@ -54,7 +54,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const textOutputPath = path.join(uploadsDir, `${path.basename(filePath, '.pdf')}.txt`);
     await execPromise(`pdftotext "${filePath}" "${textOutputPath}"`);
 
-    // Read extracted text
     const extractedText = await fs.readFile(textOutputPath, 'utf-8');
 
     // Convert PDF to images using `pdftoppm`
