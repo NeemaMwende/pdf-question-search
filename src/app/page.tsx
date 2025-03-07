@@ -1,96 +1,194 @@
-// File: pages/index.tsx
-"use client"
-import { useState } from 'react';
+// app/page.tsx
+'use client';
+
+import { useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
+import SearchBar from '../components/SearchBar';
+import QuestionAnswer from '../components/QuestionAnswer';
 
-interface FileItem {
-  name: string;
-  path: string;
+interface Document {
+  id: string;
+  filename: string;
+  text: string;
+  questions: string[];
+  answers: Record<string, string>;
 }
 
-interface Question {
-  text: string;
-  id: string;
+interface SearchResult {
+  type: 'question' | 'answer';
+  content: string;
+  filename: string;
+  answer?: string;
 }
 
 export default function Home() {
-  const [files, setFiles] = useState<FileItem[]>([]);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [fileImage, setFileImage] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [analysisStep, setAnalysisStep] = useState<'idle' | 'converting' | 'extracting' | 'complete'>('idle');
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [activeDocument, setActiveDocument] = useState<Document | null>(null);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
+  const [answer, setAnswer] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [analysisStep, setAnalysisStep] = useState<'idle' | 'processing' | 'complete'>('idle');
 
-  // Handle folder upload
-  const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    
-    setLoading(true);
-    const fileList = Array.from(e.target.files);
-    
-    // Filter for PDF files only
-    const pdfFiles = fileList.filter(file => file.type === 'application/pdf');
-    
-    const fileItems: FileItem[] = pdfFiles.map(file => ({
-      name: file.name,
-      path: URL.createObjectURL(file)
-    }));
-    
-    setFiles(fileItems);
-    setLoading(false);
+  useEffect(() => {
+    // Load documents on component mount
+    fetchDocuments();
+  }, []);
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await fetch('/api/search');
+      const data = await response.json();
+      if (data.success) {
+        setDocuments(data.documents || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch documents:', error);
+    }
   };
 
-  // Handle file selection
-  const handleFileSelect = async (filePath: string) => {
-    setSelectedFile(filePath);
-    setFileContent(null);
-    setFileImage(null);
-    setQuestions([]);
-    setAnalysisStep('converting');
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    if (file.type !== 'application/pdf') {
+      alert('Please upload a PDF file');
+      return;
+    }
+    
+    setIsLoading(true);
+    setAnalysisStep('processing');
     
     try {
-      // Upload the file to our API
-      const file = await fetch(filePath).then(r => r.blob());
       const formData = new FormData();
       formData.append('file', file);
       
-      const response = await fetch('/api/upload', {
+      // Extract text from PDF
+      const response = await fetch('/api/extract-text', {
         method: 'POST',
-        body: formData,
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        const { text, filename } = result;
+        
+        // Extract questions from the document
+        const questionResponse = await fetch('/api/extract-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, filename })
+        });
+        
+        const questionData = await questionResponse.json();
+        
+        if (questionData.success) {
+          const newDocument = {
+            id: uuidv4(),
+            filename,
+            text,
+            questions: questionData.questions,
+            answers: {}
+          };
+          
+          // Save document to "database"
+          await fetch('/api/search', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newDocument)
+          });
+          
+          await fetchDocuments();
+          setActiveDocument(newDocument);
+          setQuestions(questionData.questions);
+          setAnalysisStep('complete');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to process document:', error);
+      setAnalysisStep('idle');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = async (searchTerm: string, searchIn: string = 'both') => {
+    if (!searchTerm) return;
+    
+    setIsSearching(true);
+    
+    try {
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchTerm, searchIn })
       });
       
       const data = await response.json();
       
-      if (data.error) {
-        console.error(data.error);
-        return;
+      if (data.success) {
+        setSearchResults(data.results);
       }
-      
-      setFileContent(data.text);
-      setFileImage(data.images[0]); // Get the first image
+    } catch (error) {
+      console.error('Search failed:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
-      // Extract questions
-      setAnalysisStep('extracting');
-      const questionsResponse = await fetch('/api/extract-questions', {
+  const handleQuestionClick = async (question: string) => {
+    setSelectedQuestion(question);
+    setAnswer('');
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch('/api/answer-question', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: data.text }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          context: activeDocument?.text,
+          filename: activeDocument?.filename
+        })
       });
       
-      const questionsData = await questionsResponse.json();
-      setQuestions(questionsData.questions);
-      setAnalysisStep('complete');
+      const data = await response.json();
       
+      if (data.success) {
+        setAnswer(data.answer);
+        
+        if (activeDocument) {
+          // Update document with new answer
+          const updatedDocument = {
+            ...activeDocument,
+            answers: {
+              ...activeDocument.answers,
+              [question]: data.answer
+            }
+          };
+          
+          // Save updated document
+          await fetch('/api/search', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedDocument)
+          });
+          
+          setActiveDocument(updatedDocument);
+        }
+      }
     } catch (error) {
-      console.error('Error processing file:', error);
-      setAnalysisStep('idle');
+      console.error('Failed to get answer:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -98,124 +196,164 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto py-8 px-4">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Document Analyzer</h1>
-          <p className="text-gray-600">Upload a folder of documents to analyze and extract questions</p>
+          <h1 className="text-3xl font-bold text-gray-800">PDF Question Analyzer</h1>
+          <p className="text-gray-600">Upload PDF documents to analyze and extract questions</p>
         </header>
 
         <div className="mb-6">
           <Button 
-            onClick={() => document.getElementById('folder-upload')?.click()}
+            onClick={() => document.getElementById('file-upload')?.click()}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            Upload Folder
+            Upload PDF
           </Button>
           <input
-            id="folder-upload"
+            id="file-upload"
             type="file"
-            multiple
-            directory=""
-            webkitdirectory=""
+            accept="application/pdf"
             className="hidden"
-            onChange={handleFolderUpload}
+            onChange={handleFileUpload}
           />
-          {loading && (
+          {isLoading && (
             <span className="ml-4 inline-flex items-center">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing files...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing file...
             </span>
           )}
         </div>
 
-        {files.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* File List Panel */}
-            <Card className="md:col-span-1">
-              <CardContent className="p-4">
-                <h2 className="text-xl font-semibold mb-4">Files ({files.length})</h2>
-                <ScrollArea className="h-96">
-                  <ul className="space-y-2">
-                    {files.map((file, index) => (
-                      <li key={index}>
-                        <Button
-                          variant={selectedFile === file.path ? "default" : "outline"}
-                          className="w-full justify-start text-left"
-                          onClick={() => handleFileSelect(file.path)}
-                        >
-                          {file.name}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-            
-            {/* Document Content & Questions Panel */}
-            <Card className="md:col-span-2">
-              <CardContent className="p-4">
-                {selectedFile ? (
-                  <Tabs defaultValue="document">
-                    <TabsList className="mb-4">
-                      <TabsTrigger value="document">Document</TabsTrigger>
-                      <TabsTrigger value="questions">Questions</TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="document">
-                      <h2 className="text-xl font-semibold mb-4">Document Content</h2>
-                      {analysisStep !== 'idle' && analysisStep !== 'complete' && (
-                        <div className="flex items-center justify-center p-8">
-                          <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                          <span>{analysisStep === 'converting' ? 'Converting document...' : 'Extracting questions...'}</span>
-                        </div>
-                      )}
-                      
-                      {fileImage && (
-                        <ScrollArea className="h-96">
-                          <div className="border rounded-md p-2 mb-4">
-                            <img src={fileImage} alt="Document preview" className="max-w-full" />
-                          </div>
-                        </ScrollArea>
-                      )}
-                    </TabsContent>
-                    
-                    <TabsContent value="questions">
-                      <h2 className="text-xl font-semibold mb-4">Extracted Questions</h2>
-                      
-                      {analysisStep !== 'complete' ? (
-                        <div className="flex items-center justify-center p-8">
-                          {analysisStep !== 'idle' && (
-                            <>
-                              <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                              <span>{analysisStep === 'converting' ? 'Converting document...' : 'Extracting questions...'}</span>
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        questions.length > 0 ? (
-                          <ScrollArea className="h-96">
-                            <ul className="space-y-2">
-                              {questions.map((question, idx) => (
-                                <li key={question.id} className="bg-gray-50 p-3 rounded-md border">
-                                  <span className="font-medium mr-2">{idx + 1}.</span>
-                                  {question.text}
-                                </li>
-                              ))}
-                            </ul>
-                          </ScrollArea>
-                        ) : (
-                          <p>No questions found in this document.</p>
-                        )
-                      )}
-                    </TabsContent>
-                  </Tabs>
-                ) : (
-                  <div className="flex items-center justify-center h-96 bg-gray-100 rounded-md">
-                    <p className="text-gray-500">Select a file to view its content</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+        <SearchBar onSearch={handleSearch} />
+          
+        {isSearching ? (
+          <div className="mb-6 p-4 bg-white rounded-lg shadow">
+            <div className="flex items-center">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Searching...
+            </div>
           </div>
-        )}
+        ) : searchResults.length > 0 ? (
+          <Card className="mb-6">
+            <CardContent className="p-4">
+              <h2 className="text-xl font-semibold mb-4">Search Results</h2>
+              <ScrollArea className="h-64">
+                <ul className="divide-y">
+                  {searchResults.map((result, index) => (
+                    <li key={index} className="py-3 px-2">
+                      <p className="font-medium">{result.type === 'question' ? 'Q: ' : 'A: '}{result.content}</p>
+                      <p className="text-sm text-gray-500">
+                        From: {result.filename}
+                        {result.type === 'question' && result.answer && (
+                          <Button 
+                            variant="link"
+                            className="ml-2 p-0 h-auto text-blue-500"
+                            onClick={() => {
+                              setSelectedQuestion(result.content);
+                              setAnswer(result.answer);
+                            }}
+                          >
+                            View Answer
+                          </Button>
+                        )}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Document List Panel */}
+          <Card className="md:col-span-1">
+            <CardContent className="p-4">
+              <h2 className="text-xl font-semibold mb-4">Documents ({documents.length})</h2>
+              <ScrollArea className="h-96">
+                <ul className="space-y-2">
+                  {documents.map((doc) => (
+                    <li key={doc.id}>
+                      <Button
+                        variant={activeDocument?.id === doc.id ? "default" : "outline"}
+                        className="w-full justify-start text-left"
+                        onClick={() => {
+                          setActiveDocument(doc);
+                          setQuestions(doc.questions);
+                          setSelectedQuestion(null);
+                          setAnswer('');
+                        }}
+                      >
+                        <div>
+                          <div className="font-medium truncate">{doc.filename}</div>
+                          <div className="text-xs opacity-70">{doc.questions.length} questions</div>
+                        </div>
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+          
+          {/* Document Content & Questions Panel */}
+          <Card className="md:col-span-2">
+            <CardContent className="p-4">
+              {activeDocument ? (
+                <Tabs defaultValue="questions">
+                  <TabsList className="mb-4">
+                    <TabsTrigger value="document">Document</TabsTrigger>
+                    <TabsTrigger value="questions">Questions</TabsTrigger>
+                    {selectedQuestion && <TabsTrigger value="answer">Answer</TabsTrigger>}
+                  </TabsList>
+                  
+                  <TabsContent value="document">
+                    <h2 className="text-xl font-semibold mb-4">Document Content</h2>
+                    <ScrollArea className="h-96 border rounded-md p-4">
+                      <div className="whitespace-pre-line">
+                        {activeDocument.text}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                  
+                  <TabsContent value="questions">
+                    <h2 className="text-xl font-semibold mb-4">Extracted Questions</h2>
+                    {questions.length > 0 ? (
+                      <ScrollArea className="h-96">
+                        <ul className="space-y-2">
+                          {questions.map((question, idx) => (
+                            <li 
+                              key={idx} 
+                              className={`bg-gray-50 p-3 rounded-md border cursor-pointer hover:bg-gray-100 ${
+                                selectedQuestion === question ? 'bg-blue-50 border-blue-300' : ''
+                              }`}
+                              onClick={() => handleQuestionClick(question)}
+                            >
+                              <span className="font-medium mr-2">{idx + 1}.</span>
+                              {question}
+                            </li>
+                          ))}
+                        </ul>
+                      </ScrollArea>
+                    ) : (
+                      <p className="text-gray-500">No questions found in this document.</p>
+                    )}
+                  </TabsContent>
+                  
+                  {selectedQuestion && (
+                    <TabsContent value="answer">
+                      <QuestionAnswer 
+                        question={selectedQuestion} 
+                        answer={answer} 
+                        isLoading={isLoading}
+                      />
+                    </TabsContent>
+                  )}
+                </Tabs>
+              ) : (
+                <div className="flex items-center justify-center h-96 bg-gray-100 rounded-md">
+                  <p className="text-gray-500">Select a document to view its content</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
