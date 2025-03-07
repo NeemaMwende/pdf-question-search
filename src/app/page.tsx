@@ -35,7 +35,6 @@ export default function Home() {
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
   const [answer, setAnswer] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [analysisStep, setAnalysisStep] = useState<'idle' | 'processing' | 'complete'>('idle');
 
   useEffect(() => {
     // Load documents on component mount
@@ -64,7 +63,6 @@ export default function Home() {
     }
     
     setIsLoading(true);
-    setAnalysisStep('processing');
     
     try {
       const formData = new FormData();
@@ -109,12 +107,10 @@ export default function Home() {
           await fetchDocuments();
           setActiveDocument(newDocument);
           setQuestions(questionData.questions);
-          setAnalysisStep('complete');
         }
       }
     } catch (error) {
       console.error('Failed to process document:', error);
-      setAnalysisStep('idle');
     } finally {
       setIsLoading(false);
     }
@@ -150,13 +146,17 @@ export default function Home() {
     setIsLoading(true);
     
     try {
+      // Make sure context and filename are defined or use empty strings as fallback
+      const context = activeDocument?.text || '';
+      const filename = activeDocument?.filename || '';
+      
       const response = await fetch('/api/answer-question', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question,
-          context: activeDocument?.text,
-          filename: activeDocument?.filename
+          context,
+          filename
         })
       });
       
@@ -190,6 +190,36 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const renderSearchResultItem = (result: SearchResult, index: number) => {
+    // Extract the nested ternary into separate variables
+    const prefix = result.type === 'question' ? 'Q: ' : 'A: ';
+    const showViewAnswerButton = result.type === 'question' && result.answer;
+    
+    return (
+      <li key={index} className="py-3 px-2">
+        <p className="font-medium">{prefix}{result.content}</p>
+        <p className="text-sm text-gray-500">
+          From: {result.filename}
+          {showViewAnswerButton && (
+            <Button 
+              variant="link"
+              className="ml-2 p-0 h-auto text-blue-500"
+              onClick={() => {
+                setSelectedQuestion(result.content);
+                // Ensure answer is not undefined before setting it
+                if (result.answer) {
+                  setAnswer(result.answer);
+                }
+              }}
+            >
+              View Answer
+            </Button>
+          )}
+        </p>
+      </li>
+    );
   };
 
   return (
@@ -235,26 +265,7 @@ export default function Home() {
               <h2 className="text-xl font-semibold mb-4">Search Results</h2>
               <ScrollArea className="h-64">
                 <ul className="divide-y">
-                  {searchResults.map((result, index) => (
-                    <li key={index} className="py-3 px-2">
-                      <p className="font-medium">{result.type === 'question' ? 'Q: ' : 'A: '}{result.content}</p>
-                      <p className="text-sm text-gray-500">
-                        From: {result.filename}
-                        {result.type === 'question' && result.answer && (
-                          <Button 
-                            variant="link"
-                            className="ml-2 p-0 h-auto text-blue-500"
-                            onClick={() => {
-                              setSelectedQuestion(result.content);
-                              setAnswer(result.answer);
-                            }}
-                          >
-                            View Answer
-                          </Button>
-                        )}
-                      </p>
-                    </li>
-                  ))}
+                  {searchResults.map((result, index) => renderSearchResultItem(result, index))}
                 </ul>
               </ScrollArea>
             </CardContent>
@@ -297,10 +308,12 @@ export default function Home() {
             <CardContent className="p-4">
               {activeDocument ? (
                 <Tabs defaultValue="questions">
-                  <TabsList className="mb-4">
-                    <TabsTrigger value="document">Document</TabsTrigger>
-                    <TabsTrigger value="questions">Questions</TabsTrigger>
-                    {selectedQuestion && <TabsTrigger value="answer">Answer</TabsTrigger>}
+                  <TabsList className="mb-4 flex w-full">
+                    <TabsTrigger value="document" className="flex-1 text-center">Document</TabsTrigger>
+                    <TabsTrigger value="questions" className="flex-1 text-center">Questions</TabsTrigger>
+                    {selectedQuestion && (
+                      <TabsTrigger value="answer" className="flex-1 text-center">Answer</TabsTrigger>
+                    )}
                   </TabsList>
                   
                   <TabsContent value="document">
