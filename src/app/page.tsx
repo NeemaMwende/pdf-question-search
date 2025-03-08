@@ -65,6 +65,19 @@ export default function Home() {
     setIsLoading(true);
     
     try {
+      
+      const tempDocument = {
+        id: 'temp-' + Date.now(),
+        filename: file.name,
+        text: 'Processing...',
+        questions: [],
+        answers: {}
+      };
+      
+     
+      setActiveDocument(tempDocument);
+      setQuestions([]);
+      
       const formData = new FormData();
       formData.append('file', file);
       
@@ -111,8 +124,13 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Failed to process document:', error);
+      alert('Failed to process document. Please try again.');
     } finally {
       setIsLoading(false);
+  
+      if (e.target) {
+        e.target.value = '';
+      }
     }
   };
 
@@ -274,32 +292,39 @@ export default function Home() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Document List Panel */}
+       
           <Card className="md:col-span-1">
             <CardContent className="p-4">
               <h2 className="text-xl font-semibold mb-4">Documents ({documents.length})</h2>
-              <ScrollArea className="h-96">
-                <ul className="space-y-2">
-                  {documents.map((doc) => (
-                    <li key={doc.id}>
-                      <Button
-                        variant={activeDocument?.id === doc.id ? "default" : "outline"}
-                        className="w-full justify-start text-left"
-                        onClick={() => {
-                          setActiveDocument(doc);
-                          setQuestions(doc.questions);
-                          setSelectedQuestion(null);
-                          setAnswer('');
-                        }}
-                      >
-                        <div>
-                          <div className="font-medium truncate">{doc.filename}</div>
-                          <div className="text-xs opacity-70">{doc.questions.length} questions</div>
-                        </div>
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </ScrollArea>
+              {documents.length > 0 ? (
+                <ScrollArea className="h-96">
+                  <ul className="space-y-2">
+                    {documents.map((doc) => (
+                      <li key={doc.id}>
+                        <Button
+                          variant={activeDocument?.id === doc.id ? "default" : "outline"}
+                          className="w-full justify-start text-left"
+                          onClick={() => {
+                            setActiveDocument(doc);
+                            setQuestions(doc.questions);
+                            setSelectedQuestion(null);
+                            setAnswer('');
+                          }}
+                        >
+                          <div className="w-full overflow-hidden">
+                            <div className="font-medium truncate">{doc.filename}</div>
+                            <div className="text-xs opacity-70">{doc.questions.length} questions</div>
+                          </div>
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+              ) : (
+                <div className="flex items-center justify-center h-32 bg-gray-100 rounded-md">
+                  <p className="text-gray-500">No documents uploaded yet</p>
+                </div>
+              )}
             </CardContent>
           </Card>
           
