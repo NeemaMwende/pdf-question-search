@@ -30,7 +30,8 @@
         "Why is Machine Learning Possible Now?"
       ],
       "answers": {
-        "Why is Machine Learning Possible Now?": "Machine learning is possible now because it allows computers to \"learn by example\" through training with large volumes of data, which was not possible with traditional programming on classic computers that operated based on fixed rules. This training process enables computers to make predictions and complex decisions autonomously once the model is trained."
+        "Why is Machine Learning Possible Now?": "Machine learning is possible now because it allows computers to \"learn by example\" through training with large volumes of data, which was not possible with traditional programming on classic computers that operated based on fixed rules. This training process enables computers to make predictions and complex decisions autonomously once the model is trained.",
+        "Imagine it’s 1950, and you’re a visitor who traveled back in time from today. Your job is to explain the impact computers will have on business, defense, and society to people who are using manual calculators and slide rules?": "The impact of computers on business, defense, and society would be explained by highlighting how they can enable digital transformation, streamline operations, enhance decision-making processes, and provide a competitive edge. Businesses and governments adopting computers and learning to code would have a significant advantage over their competitors/adversaries in terms of efficiency, innovation, and strategic capabilities. This analogy illustrates the transformative potential of technology adoption and adaptation in driving progress and success."
       }
     },
     {
