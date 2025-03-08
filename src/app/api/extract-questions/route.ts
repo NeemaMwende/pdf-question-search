@@ -1,3 +1,4 @@
+// Modified extract-questions/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant that identifies questions within documents. Extract all questions from the provided text. Return only the questions in a JSON array format. Include exact quotes, not paraphrased versions."
+          content: "You are a helpful assistant that identifies questions within documents. Extract all questions from the provided text as they are. Return ONLY a valid JSON array of strings with the questions. Do not include any explanations, formatting, or backticks. Example of valid response format: [\"Question 1?\", \"Question 2?\"]"
         },
         {
           role: "user",
@@ -27,7 +28,8 @@ export async function POST(req: NextRequest) {
         }
       ],
       max_tokens: 500,
-      temperature: 0.3
+      temperature: 0.3,
+      response_format: { type: "json_object" } 
     });
 
     // Ensure a valid response exists
@@ -38,15 +40,25 @@ export async function POST(req: NextRequest) {
 
     let questions: string[] = [];
     try {
+   
       const parsedData = JSON.parse(content);
+      
+      // Check if the response contains a questions array
       if (Array.isArray(parsedData.questions)) {
         questions = parsedData.questions;
+      } else if (Array.isArray(parsedData)) {
+        questions = parsedData;
       } else {
+        console.error('Unexpected response format:', content);
         throw new Error('Invalid response format from OpenAI');
       }
     } catch (parseError) {
-      console.error('Failed to parse OpenAI response:', parseError);
-      return NextResponse.json({ error: 'Failed to process extracted questions' }, { status: 500 });
+      console.error('Failed to parse OpenAI response:', parseError, 'Content:', content);
+      return NextResponse.json({ 
+        error: 'Failed to process extracted questions', 
+        details: parseError instanceof Error ? parseError.message : 'Unknown parsing error',
+        content 
+      }, { status: 500 });
     }
 
     return NextResponse.json({
